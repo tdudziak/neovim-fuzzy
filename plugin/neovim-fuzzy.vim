@@ -138,6 +138,7 @@ command!          FuzzyOpenFileInTab     call s:fuzzy_split('tab')
 command!          FuzzyOpenFileInSplit   call s:fuzzy_split('split')
 command!          FuzzyOpenFileInVSplit  call s:fuzzy_split('vsplit')
 command!          FuzzyKill              call s:fuzzy_kill()
+command! -nargs=1 FuzzyCommand           call s:fuzzy_command(<q-args>)
 
 function! s:fuzzy_kill()
   echo
@@ -214,6 +215,19 @@ function! s:fuzzy_open(root) abort
   return s:fuzzy(result, opts)
 endfunction
 
+function! s:fuzzy_command(file) abort
+  let opts = {}
+  let opts.lines = g:fuzzy_winheight
+  let opts.statusfmt = 'FuzzyCommand %s (%d results)'
+  let opts.root = s:fuzzy_getroot()
+  function! opts.handler(result) abort
+    let cmd = substitute(a:result[0], "\x1e.*$", "", "")
+    return { 'command': cmd }
+  endfunction
+  let lines = readfile(a:file)
+  return s:fuzzy(lines, opts)
+endfunction
+
 function! s:fuzzy(choices, opts) abort
   let inputs = tempname()
   let outputs = tempname()
@@ -247,18 +261,23 @@ function! s:fuzzy(choices, opts) abort
     if !empty(results)
       for result in results
         let file = self.handler([result])
-        exe 'lcd' self.root
+        if has_key(file, 'name')
+          exe 'lcd' self.root
 
-        if s:fuzzy_selected_opencmd == ''
-          let s:fuzzy_selected_opencmd = g:fuzzy_opencmd
+          if s:fuzzy_selected_opencmd == ''
+            let s:fuzzy_selected_opencmd = g:fuzzy_opencmd
+          endif
+
+          silent execute s:fuzzy_selected_opencmd . ' ' . fnameescape(expand(file.name))
+
+          lcd -
+          if has_key(file, 'lnum')
+            silent execute file.lnum
+            normal! zz
+          endif
         endif
-
-        silent execute s:fuzzy_selected_opencmd . ' ' . fnameescape(expand(file.name))
-
-        lcd -
-        if has_key(file, 'lnum')
-          silent execute file.lnum
-          normal! zz
+        if has_key(file, 'command')
+          execute file.command
         endif
       endfor
     endif
